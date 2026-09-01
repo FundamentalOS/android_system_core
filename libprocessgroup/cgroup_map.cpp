@@ -20,16 +20,16 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include <regex>
-
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cgroup_map.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/util.h>
 
 using android::base::StringPrintf;
+using android::base::StringReplace;
 using android::base::WriteStringToFile;
 
 static constexpr const char* CGROUP_PROCS_FILE = "/cgroup.procs";
@@ -83,8 +83,12 @@ std::string CgroupControllerWrapper::GetProcsFilePath(const std::string& rel_pat
                                                       pid_t pid) const {
     std::string proc_path(path());
     proc_path.append("/").append(rel_path);
-    proc_path = regex_replace(proc_path, std::regex("<uid>"), std::to_string(uid));
-    proc_path = regex_replace(proc_path, std::regex("<pid>"), std::to_string(pid));
+    // Only the templated paths contain "<uid>"/"<pid>"; skip substitution (and the heavy
+    // std::regex build this used to do per call) when there is nothing to replace.
+    if (proc_path.find('<') != std::string::npos) {
+        proc_path = StringReplace(proc_path, "<uid>", std::to_string(uid), /*all=*/true);
+        proc_path = StringReplace(proc_path, "<pid>", std::to_string(pid), /*all=*/true);
+    }
 
     return proc_path.append(CGROUP_PROCS_FILE);
 }
