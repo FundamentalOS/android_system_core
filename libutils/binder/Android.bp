@@ -76,6 +76,12 @@ cc_defaults {
         "libutils_binder_impl_defaults_nodeps",
         "libutils_defaults",
     ],
+    target: {
+        android: {
+            cflags: ["-DLIBUTILS_ENABLE_SIMDUTF"],
+            whole_static_libs: ["libsimdutf"],
+        },
+    },
 }
 
 cc_defaults {
@@ -84,6 +90,12 @@ cc_defaults {
         "libutils_binder_impl_defaults_nodeps_no_apex",
         "libutils_defaults",
     ],
+    target: {
+        android: {
+            cflags: ["-DLIBUTILS_ENABLE_SIMDUTF"],
+            whole_static_libs: ["libsimdutf"],
+        },
+    },
 }
 
 cc_library {

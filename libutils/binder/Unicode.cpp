@@ -21,6 +21,10 @@
 
 #include <log/log.h>
 
+#ifdef LIBUTILS_ENABLE_SIMDUTF
+#include <simdutf.h>
+#endif
+
 extern "C" {
 
 static const char32_t kByteMask = 0x000000BF;
@@ -297,6 +301,13 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
     if (src == nullptr || src_len == 0)
         return -1;
 
+#ifdef LIBUTILS_ENABLE_SIMDUTF
+    if (simdutf::validate_utf16le(src, src_len)) {
+        size_t n = simdutf::utf8_length_from_utf16le(src, src_len);
+        return n < SSIZE_MAX ? static_cast<ssize_t>(n) : -1;
+    }
+#endif
+
     const char16_t* const end = src + src_len;
     const char16_t* in = src;
     size_t utf8_len = 0;
@@ -330,6 +341,19 @@ void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_le
     if (src == nullptr || src_len == 0 || dst == nullptr) {
         return;
     }
+
+#ifdef LIBUTILS_ENABLE_SIMDUTF
+    {
+        const size_t need = simdutf::utf8_length_from_utf16le(src, src_len);
+        if (need + 1 <= dst_len) {
+            const size_t n = simdutf::convert_utf16le_to_utf8(src, src_len, dst);
+            if (n != 0) {
+                dst[n] = 0;
+                return;
+            }
+        }
+    }
+#endif
 
     const char16_t* in = src;
     const char16_t* const in_end = src + src_len;
@@ -412,6 +436,13 @@ ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len, bool overreadIs
     if (u8str == nullptr)
         return -1;
 
+#ifdef LIBUTILS_ENABLE_SIMDUTF
+    if (simdutf::validate_utf8(reinterpret_cast<const char*>(u8str), u8len)) {
+        size_t n = simdutf::utf16_length_from_utf8(reinterpret_cast<const char*>(u8str), u8len);
+        return n < SSIZE_MAX ? static_cast<ssize_t>(n) : -1;
+    }
+#endif
+
     const uint8_t* const in_end = u8str + u8len;
     const uint8_t* in = u8str;
     size_t utf16_len = 0;
@@ -471,6 +502,20 @@ char16_t* utf8_to_utf16_no_null_terminator(
     }
     // A value > SSIZE_MAX is probably a negative value returned as an error and casted.
     LOG_ALWAYS_FATAL_IF(dstLen > SSIZE_MAX, "dstLen is %zu", dstLen);
+
+#ifdef LIBUTILS_ENABLE_SIMDUTF
+    {
+        const size_t need = simdutf::utf16_length_from_utf8(
+                reinterpret_cast<const char*>(src), srcLen);
+        if (need <= dstLen) {
+            const size_t n = simdutf::convert_utf8_to_utf16le(
+                    reinterpret_cast<const char*>(src), srcLen, dst);
+            if (n != 0) {
+                return dst + n;
+            }
+        }
+    }
+#endif
 
     const uint8_t* const in_end = src + srcLen;
     const uint8_t* in = src;
