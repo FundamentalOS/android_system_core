@@ -23,6 +23,11 @@
 
 #ifdef LIBUTILS_ENABLE_SIMDUTF
 #include <simdutf.h>
+// Below these input sizes the scalar decoder beats simdutf's validate+length+
+// convert passes (measured on caiman); gate the fast path on length so short
+// strings (the common binder Parcel case) stay on the scalar path.
+static constexpr size_t kSimdutfMinUtf8Bytes = 64;
+static constexpr size_t kSimdutfMinUtf16Units = 32;
 #endif
 
 extern "C" {
@@ -302,7 +307,7 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
         return -1;
 
 #ifdef LIBUTILS_ENABLE_SIMDUTF
-    if (simdutf::validate_utf16le(src, src_len)) {
+    if (src_len >= kSimdutfMinUtf16Units && simdutf::validate_utf16le(src, src_len)) {
         size_t n = simdutf::utf8_length_from_utf16le(src, src_len);
         return n < SSIZE_MAX ? static_cast<ssize_t>(n) : -1;
     }
@@ -343,7 +348,7 @@ void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_le
     }
 
 #ifdef LIBUTILS_ENABLE_SIMDUTF
-    {
+    if (src_len >= kSimdutfMinUtf16Units) {
         const size_t need = simdutf::utf8_length_from_utf16le(src, src_len);
         if (need + 1 <= dst_len) {
             const size_t n = simdutf::convert_utf16le_to_utf8(src, src_len, dst);
@@ -437,7 +442,8 @@ ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len, bool overreadIs
         return -1;
 
 #ifdef LIBUTILS_ENABLE_SIMDUTF
-    if (simdutf::validate_utf8(reinterpret_cast<const char*>(u8str), u8len)) {
+    if (u8len >= kSimdutfMinUtf8Bytes &&
+        simdutf::validate_utf8(reinterpret_cast<const char*>(u8str), u8len)) {
         size_t n = simdutf::utf16_length_from_utf8(reinterpret_cast<const char*>(u8str), u8len);
         return n < SSIZE_MAX ? static_cast<ssize_t>(n) : -1;
     }
@@ -504,7 +510,7 @@ char16_t* utf8_to_utf16_no_null_terminator(
     LOG_ALWAYS_FATAL_IF(dstLen > SSIZE_MAX, "dstLen is %zu", dstLen);
 
 #ifdef LIBUTILS_ENABLE_SIMDUTF
-    {
+    if (srcLen >= kSimdutfMinUtf8Bytes) {
         const size_t need = simdutf::utf16_length_from_utf8(
                 reinterpret_cast<const char*>(src), srcLen);
         if (need <= dstLen) {
